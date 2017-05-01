@@ -26,7 +26,9 @@ module tb_detector_secuencia();
 	end
 
 	initial begin
-		#5 reset = 1'b0;
+		#10
+		reset = 1'b0;
+		entrada = 1'b0;
 	end
 
 	integer i;
