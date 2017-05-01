@@ -16,11 +16,11 @@ module alu
 	output [3:0] flags
 );
 
-	localparam ALU_OP_ADD = 'b000;
-	localparam ALU_OP_SUB = 'b001;
-	localparam ALU_OP_MUL = 'b010;
-	localparam ALU_OP_OR  = 'b011;
+	localparam ALU_OP_ADD = 'b001;
+	localparam ALU_OP_SUB = 'b010;
+	localparam ALU_OP_MUL = 'b011;
 	localparam ALU_OP_AND = 'b100;
+	localparam ALU_OP_OR  = 'b101;
 
 	/* Sign extension */
 	reg signed [WIDTH:0] out_ext;

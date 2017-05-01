@@ -32,11 +32,11 @@ module lab3bis_top
 	wire fsm_reset = ~reset_n;
 
 	/* Operaciones de la ALU */
-	localparam ALU_OP_ADD = 'b000;
-	localparam ALU_OP_SUB = 'b001;
-	localparam ALU_OP_MUL = 'b010;
-	localparam ALU_OP_OR  = 'b011;
+	localparam ALU_OP_ADD = 'b001;
+	localparam ALU_OP_SUB = 'b010;
+	localparam ALU_OP_MUL = 'b011;
 	localparam ALU_OP_AND = 'b100;
+	localparam ALU_OP_OR  = 'b101;
 	reg [2:0] alu_op, alu_op_next;
 	assign led16 = alu_op;
 
