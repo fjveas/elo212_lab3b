@@ -13,7 +13,7 @@ module alu
 	input [2:0] op,
 
 	output signed [WIDTH-1:0] out,
-	output [3:0] flags
+	output [4:0] flags
 );
 
 	localparam ALU_OP_ADD = 'b001;
@@ -30,6 +30,7 @@ module alu
 
 	/* Flags */
 	reg error; // For undefined ALU operations
+	reg negative;
 	reg zero;
 	reg carry;
 	reg overflow;
@@ -55,26 +56,30 @@ module alu
 		endcase
 	end
 
-	/* Overflow/underflow and carry detection */
+	/* Overflow/underflow, carry and negative detection */
 	always @(*) begin
 		case (out_ext[WIDTH:WIDTH-1])
 		'b00: begin
 			carry = 1'b0;
 			overflow = 1'b0;
+			negative = 1'b0;
 		end
 		'b01: begin
 			carry = 1'b0;
 			overflow = 1'b1;
+			negative = 1'b1;
 		end
 		'b10: begin
 			carry = 1'b1;
 			/* Technically this is an underflow,
 			   but we make no distinction */
 			overflow = 1'b1;
+			negative = 1'b0;
 		end
 		'b11: begin
 			carry = 1'b1;
 			overflow = 1'b0;
+			negative = 1'b1;
 		end
 		endcase
 	end
@@ -89,6 +94,6 @@ module alu
 
 	/* Outputs */
 	assign out = out_ext[WIDTH-1:0];
-	assign flags = {error, zero, carry, overflow};
+	assign flags = {error, negative, zero, carry, overflow};
 
 endmodule
