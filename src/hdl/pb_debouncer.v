@@ -2,92 +2,7 @@
 
 module pb_debouncer
 #(
-	parameter C_WIDTH = 20 // Counter width
-)(
-	input clk,
-	input pb,
-
-	output reg pb_state,
-	output pb_down,
-	output pb_up
-);
-
-	reg [1:0] pb_sync_shift;
-	always @(posedge clk)
-		pb_sync_shift <= {pb_sync_shift[0], pb};
-
-	reg [C_WIDTH-1:0] counter;
-	wire counter_max = (counter == {C_WIDTH{1'b1}});
-
-	wire pb_sync = pb_sync_shift[1];
-	wire pb_idle = (pb_state == pb_sync);
-
-	always @(posedge clk) begin
-		if (pb_idle)
-			counter <= 'd0;
-		else begin
-			counter <= counter + 'd1;
-			if (counter_max) begin
-				pb_state <= ~pb_state;
-			end
-		end
-	end
-
-	assign pb_down = ~pb_idle & counter_max & ~pb_state;
-	assign pb_up = ~pb_idle & counter_max & pb_state;
-
-endmodule
-
-module pb_debouncer_alt
-#(
-	parameter C_WIDTH = 20 // Counter width
-)(
-	input clk,
-	input pb,
-
-	output reg pb_state,
-	output pb_down,
-	output pb_up
-);
-
-	/* Shift register for input synchronization */
-	reg [1:0] pb_sync_shift;
-	wire pb_sync = pb_sync_shift[1];
-	always @(posedge clk)
-		pb_sync_shift <= {pb_sync_shift[0], pb};
-
-	reg [C_WIDTH-1:0] counter;
-	wire counter_min = (counter == 'd0);
-	wire counter_max = (counter == (2 ** C_WIDTH - 1));
-	
-	wire pb_idle = (pb_state == pb_sync);
-
-	always @(posedge clk) begin
-		if (pb_sync == 1'b0 && ~counter_min)
-			counter <= counter - 'd1;
-		else if (pb_sync == 1'b1 && ~counter_max)
-			counter <= counter + 'd1;
-		else
-			counter <= counter;
-	end
-
-	always @(posedge clk) begin
-		if (counter_min)
-			pb_state <= 1'b0;
-		else if (counter_max)
-			pb_state <= 1'b1;
-		else
-			pb_state <= pb_state;
-	end
-
-	assign pb_down = ~pb_idle & counter_max & ~pb_state;
-	assign pb_up = ~pb_idle & counter_min & pb_state;
-
-endmodule
-
-module pb_debouncer2
-#(
-	parameter C_WIDTH = 20 // Counter width
+	parameter COUNTER_WIDTH = 16
 )(
 	input clk,
 	input rst,
@@ -96,89 +11,91 @@ module pb_debouncer2
 	output reg pb_negedge,
 	output reg pb_posedge
 );
-	
-	reg [1:0] pb_sync;		// Flip Flops para sincronizar.
-	reg [1:0] pb_sync_next;	// Etapa combinacional
-	
-	reg [1:0] button_state, button_state_next;
-	
-	reg [C_WIDTH-1:0] pb_cnt;
-	
-	wire pb_cnt_max = &pb_cnt;	// Se hace el AND de todos los bits
-	
-/////////////////////////   sincronizando la entrada con un reloj.   //////////////////
-	always @(*)
-		{pb_sync_next} = {pb_sync[0], pb};
-	
-	always @(posedge clk or posedge rst)
-		if (rst)
-			pb_sync <= 2'b00;
-		else
-			pb_sync <= pb_sync_next;
-///////////////////////////////////////////////////////////////////////////////////////
-///   Desde aca en adelante se debera utilizar pb_sync[1] como si fuera el boton.  ////
-	
-	localparam PB_IDLE = 2'b01;
-	localparam PB_COUNT = 2'b10;
-	localparam PB_STABLE = 2'b11;
-	
-	/////// Etapa combinacional para el cambio de estado //////////
+
+	localparam PB_IDLE   = 3'b000;
+	localparam PB_COUNT  = 3'b001;
+	localparam PB_PE     = 3'b010;
+	localparam PB_STABLE = 3'b011;
+	localparam PB_NE     = 3'b100;
+
+	localparam COUNTER_MSB = COUNTER_WIDTH - 1;
+
+	reg [2:0] button_state, button_state_next = PB_IDLE;
+	reg [COUNTER_MSB:0] pb_cnt, pb_cnt_next;
+
+	reg [1:0] pb_sync_sr; /* Flip Flops para sincronizar. */
+	wire pb_sync = pb_sync_sr[0];
+
+	wire pb_cnt_max = &pb_cnt;
+
+	always @(posedge clk)
+		pb_sync_sr <= {pb, pb_sync_sr[1]};
+
+	/* Etapa combinacional para el cambio de estado. */
 	always @(*) begin
-		button_state_next = PB_IDLE; //default value
+		button_state_next = button_state;
+
 		case (button_state)
 		PB_IDLE:
-			if (pb_sync[1] == 1'b1)
+			if (pb_sync == 1'b1)
 				button_state_next = PB_COUNT;
-			else
-				button_state_next = PB_IDLE;
 		PB_COUNT:
-			if (pb_cnt_max == 1'b1)
-				button_state_next = PB_STABLE;
-			else if (pb_sync[1] == 1'b0)
+			if (pb_sync == 1'b0)
 				button_state_next = PB_IDLE;
-			else
-				button_state_next = PB_COUNT;
+			else if (pb_cnt_max == 1'b1)
+				button_state_next = PB_PE;
+		PB_PE:
+			button_state_next = PB_STABLE;
 		PB_STABLE:
-			if (pb_sync[1] == 1'b0)
-				button_state_next = PB_IDLE;
-			else
-				button_state_next = PB_STABLE;
+			if (pb_sync == 1'b0)
+				button_state_next = PB_NE;
+		PB_NE:
+			button_state_next = PB_IDLE;
+		default:
+			button_state_next = PB_IDLE;
 		endcase
 	end
-	
-	//registrando el estado
-	always @(posedge clk or posedge rst)
+
+	/* Etapa combinacional de las salidas y contador. */
+	always @(*) begin
+		pb_state = 1'b0;
+		pb_negedge = 1'b0;
+		pb_posedge = 1'b0;
+		pb_cnt_next = 'd0;
+
+		case (button_state)
+		PB_STABLE:
+			pb_state = 1'b1;
+		PB_COUNT:
+			pb_cnt_next = pb_cnt + 'd1;
+		PB_PE: begin
+			pb_state = 1'b1;
+			pb_posedge = 1'b1;
+		end
+		PB_NE:
+			pb_negedge = 1'b1;
+		endcase
+	end
+
+	/* Registrando el estado. */
+	always @(posedge clk)
 		if (rst)
 			button_state <= PB_IDLE;
 		else
 			button_state <= button_state_next;
-	
-	//registrando las salidas
-	always @(posedge clk or posedge rst) begin
-		if (rst) begin
-			{pb_negedge, pb_posedge, pb_state} <= 3'b000;
-			pb_cnt <= 16'd0;
-		end else begin
-			{pb_negedge, pb_posedge, pb_state} <= 3'b000;
-			pb_cnt <= 16'd0;
 
-			case (button_state) 
-			PB_COUNT: begin
-				pb_posedge <= (pb_cnt_max == 1'b1);
-				pb_cnt <= pb_cnt + 1'b1;
-			end	
-			PB_STABLE: begin
-				pb_negedge <= (pb_sync[1] == 1'b0);
-				pb_state <= 1'b1;
-			end
-			endcase
-		end
-	end
+	/* Registrando el contador. */
+	always @(posedge clk)
+		if (rst)
+			pb_cnt <= 'd0;
+		else
+			pb_cnt <= pb_cnt_next;
+
 endmodule
 
 module pb_debouncer_wrapper
 #(
-	parameter C_WIDTH = 20 // Counter width
+	parameter COUNTER_WIDTH = 20 // Counter width
 )(
 	input clk,
 	input pb,
@@ -188,8 +105,8 @@ module pb_debouncer_wrapper
 	output pb_up
 );
 
-	pb_debouncer2 #(
-		.C_WIDTH(C_WIDTH)
+	pb_debouncer #(
+		.COUNTER_WIDTH(COUNTER_WIDTH)
 	) pb_inst (
 		.clk(clk),
 		.rst(1'b0),
