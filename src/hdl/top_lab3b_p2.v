@@ -47,6 +47,7 @@ module lab3bis_top
 
 	/* Resultado de la ALU */
 	wire [15:0] alu_out;
+	wire [3:0] alu_flags;
 
 	always @(*) begin
 		alu_in1_next = alu_in1;
@@ -138,7 +139,7 @@ module lab3bis_top
 		.clk(clk_ss),
 		.clk_enable(1'b1),
 		.bcd(bcd),
-		.dots({4'd0, state}),
+		.dots({alu_flags, state}),
 		.is_negative(is_negative),
 		.turn_off(1'b0),
 		.ss_value(ss_value),
@@ -153,7 +154,7 @@ module lab3bis_top
 		.in2(alu_in2),
 		.op(alu_op),
 		.out(alu_out),
-		.flags()
+		.flags(alu_flags)
 	);
 
 	/* Debouncers para cada botón */
